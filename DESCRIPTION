@@ -1,0 +1,34 @@
+Package: ggchunk
+Type: Package
+Title: Fold Long or High ggplot2 Graphics into One Figure
+Version: 0.1.0
+Authors@R: person("Nuan", role = c("aut", "cre"), email = "yinlin2824@gmail.com")
+Author: Nuan [aut, cre]
+Maintainer: Nuan <yinlin2824@gmail.com>
+Description: Adds a '+ ggchunk()' verb to ggplot2 pipelines that automatically
+    folds overly long or high graphics into one multi-segment figure.
+    Wide x axes are drawn as consecutive rows and high y axes as consecutive
+    columns. The number of segments can be set explicitly or chosen
+    automatically from the plot's mappings and data. Existing facets, themes,
+    scales and layers are preserved; the result is a regular ggplot or a
+    patchwork composition when the package is available.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+Depends: R (>= 4.0.0)
+Imports:
+    ggplot2 (>= 3.4.0),
+    rlang (>= 1.1.0),
+    grid,
+    grDevices
+Suggests:
+    patchwork,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+LazyData: true
+Config/testthat/edition: 3
+URL: https://github.com/shujuecn/ggchunk
+BugReports: https://github.com/shujuecn/ggchunk/issues

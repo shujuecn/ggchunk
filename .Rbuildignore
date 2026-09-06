@@ -1,0 +1,13 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^cran-comments\.md$
+^data-raw$
+^\.github$
+^_pkgdown\.yml$
+^docs$
+^revdep$
+^\.DS_Store$
+^examples$
+^Rplots\.pdf$
+^tests/testthat/Rplots\.pdf$

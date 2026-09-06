@@ -1,0 +1,245 @@
+---
+title: "ggchunk: Fold a Long ggplot Axis into One Continuous Multi-Segment Figure"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ggchunk: Fold a Long ggplot Axis into One Continuous Multi-Segment Figure}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 3.2
+)
+```
+
+```{r setup, message = FALSE}
+library(ggplot2)
+library(ggchunk)
+set.seed(2026)
+
+academic_theme <- theme_classic(base_size = 14) +
+  theme(
+    axis.text = element_text(size = 12, colour = "black"),
+    axis.title = element_text(size = 14),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 13)
+  )
+```
+
+## The problem
+
+A boxplot of 100 groups or a bar chart of 500 categories does not fit on one
+panel: the tick labels collide. A scatter plot over a wide, unevenly
+populated axis wastes space. `ggchunk()` fixes this with a single `+` at the
+end of your pipeline: it **folds the x or y axis into several consecutive
+segments** and draws all of them **in one figure**. Wide x axes become rows;
+high y axes become columns. The segments share the perpendicular axis where
+possible, sit edge-to-edge, and keep a single title and legend.
+
+## Quick start
+
+The package ships `iris100`, an "iris gone wild" dataset with 100 simulated
+species:
+
+```{r iris100, fig.height=3.4}
+p <- ggplot(iris100, aes(Species, Sepal.Length)) +
+  geom_boxplot(fill = "grey85", colour = "grey25") +
+  labs(title = "100 species: the x axis folded into 4 segments",
+       x = NULL, y = "Sepal length (cm)") +
+  academic_theme +
+  theme(axis.text.x = element_text(angle = 90, size = 12)) +
+  ggchunk(method = "x", n_per_chunk = 25)
+p
+```
+
+One call, four segments, one figure. The x axis is cut into consecutive
+strips of 25 levels each, wrapped left-to-right. Nothing else about the plot
+changed -- layers, facets, themes and scales are all preserved; only the data
+seen by each segment is subset, and unused factor levels are dropped so each
+segment's x axis shows exactly its own levels. `ggchunk` does not impose a
+global theme; the example's compact academic theme can be replaced with the
+font family and typography required by a target journal. By default, the
+non-chunked axis is fixed across all segments. A small continuation arrow is
+placed in the gutter between non-final segments, never over the data panels:
+downward between x-axis rows and rightward between y-axis columns. Use
+`ggchunk(show_indicator = TRUE)` to show it; explicit `nrow`/`ncol` or
+dimension-setting `plot_layout()` calls omit it to preserve the requested
+layout. It is off by default. Use
+`fixed_perpendicular = FALSE` for independent per-segment ranges.
+
+`p` is still a fully functional ggplot (with the truncation spec attached),
+so you can keep editing it afterwards:
+
+```{r edit}
+p2 <- p + labs(title = "Retitled after truncation")
+n_chunks(p2)
+```
+
+## The two truncation methods
+
+| method  | folds                                        | typical use                     |
+|---------|----------------------------------------------|---------------------------------|
+| `"x"`   | the x axis into rows (discrete levels or continuous range) | boxplots/bars with many categories; dense scatters along x |
+| `"y"`   | the y axis into columns (continuous range, sharing x) | long-tailed y values |
+| `"auto"`| detects a suitable x-axis strategy           | default                         |
+
+Group-based splitting was deliberately left to `facet_wrap()`: ggchunk only
+folds axes.
+
+### Continuous x: equal-width or equal-density cuts
+
+For continuous axes, `n_chunks` sets the number of segments. By default the
+x *range* is cut into equal-width segments; with `even = TRUE` the cut points
+are quantiles, so every segment holds roughly the same number of observations
+(useful for skewed axes):
+
+```{r even, fig.height=3.4, fig.width=6.5}
+set.seed(1)
+d <- data.frame(x = c(rexp(2000, 1/2), runif(500, 8, 10)), y = rnorm(2500))
+ggplot(d, aes(x, y)) +
+  geom_point(alpha = 0.35, size = 0.6, colour = "steelblue3") +
+  ggchunk(method = "x", n_chunks = 3, even = TRUE)
+```
+
+Segment boundaries are half-open (`[lo, hi)`, the last segment closed), so
+every row is drawn exactly once.
+
+### Truncating the y axis
+
+```{r ytrunc, fig.height=4.6, fig.width=6}
+d5 <- data.frame(
+  x = seq(0, 10, length.out = 3000),
+  y = c(rexp(1500, 1), rnorm(1500, 12, 1))
+)
+ggplot(d5, aes(x, y)) +
+  geom_point(alpha = 0.3, size = 0.6, colour = "steelblue3") +
+  ggchunk(method = "y", n_chunks = 3)
+```
+
+`method = "y"` arranges the segments horizontally: they share the x axis and
+every column shows its own y scale.
+
+### Keeping the perpendicular axis comparable
+
+The non-chunked axis is fixed to the full plot range by default. This is the
+usual choice for comparing panels: x-axis chunks share one y range, while
+y-axis chunks share one x range. Set `fixed_perpendicular = FALSE` only when
+each segment should use an independently trained perpendicular scale.
+
+```{r fixed-perpendicular, fig.height=4.2, fig.width=7}
+d_fixed <- data.frame(
+  group = factor(rep(sprintf("g%02d", 1:40), each = 6)),
+  value = c(rnorm(120, 0, 1), rnorm(120, 8, 1))
+)
+
+ggplot(d_fixed, aes(group, value)) +
+  geom_boxplot(fill = "grey85", colour = "grey25") +
+  ggchunk(method = "x", n_per_chunk = 10, fixed_perpendicular = TRUE)
+
+ggplot(d_fixed, aes(group, value)) +
+  geom_boxplot(fill = "grey85", colour = "grey25") +
+  ggchunk(method = "x", n_per_chunk = 10, fixed_perpendicular = FALSE)
+```
+
+## Automatic detection (`method = "auto"`, the default)
+
+With no arguments, `ggchunk()` inspects the plot's data and mappings:
+
+1. A **discrete x** variable with more than `threshold_col` levels (default
+   30) folds the x axis (`n_per_chunk = 20` per segment).
+2. A **continuous x** with more than `threshold_points` rows (default 10000)
+   folds the x axis (`n_chunks = 3`).
+3. If nothing triggers, the plot is returned unchanged -- `+ ggchunk()` is a
+   safe no-op for small plots.
+
+```{r auto}
+d <- data.frame(
+  variable = factor(rep(sprintf("v%02d", seq_len(45)), each = 8)),
+  value = rnorm(360)
+)
+pa <- ggplot(d, aes(variable, value)) + geom_boxplot() + ggchunk()
+n_chunks(pa)          # 45 levels / default 20 per segment
+chunk_info(pa)
+```
+
+`verbose = TRUE` prints the detection reasoning.
+
+## One figure, always
+
+All segments always render into a **single figure** -- there are no pages.
+The default layout puts x segments into **rows** and y segments into
+**columns**; `nrow` / `ncol` override it (for example `ncol = 2` arranges
+wide scatters in a grid):
+
+```{r layout, fig.height=5.5, fig.width=7}
+d2 <- data.frame(
+  variable = factor(rep(sprintf("v%02d", seq_len(60)), each = 12)),
+  value = rnorm(720, sd = 4)
+)
+ggplot(d2, aes(variable, value)) +
+  geom_boxplot(fill = "grey85", colour = "grey25", outlier.size = 0.4) +
+  ggchunk(method = "x", n_per_chunk = 15) +  # 4 segments -> 4 rows
+  academic_theme +
+  theme(axis.text.x = element_text(angle = 90, size = 12))
+```
+
+The compact styling is what makes the segments read as one chart: zero plot
+margins, panels touching edge-to-edge, shared axis titles shown once, one
+collected legend, and figure-level titles only on the first segment.
+
+## Saving
+
+```{r eval = FALSE}
+ggsave_chunk(pa, "levels.pdf", width = 12, height = 4)   # one file, whole figure
+ggsave_chunk(pa, "levels.png", width = 12, height = 4, dpi = 200)
+
+# on ggplot2 < 4.0 plain ggsave() also dispatches: ggsave("levels.pdf", pa)
+```
+
+## patchwork integration
+
+When patchwork is installed, the figure *is* a patchwork object, and
+`plot_layout()` / `plot_annotation()` added after `ggchunk()` style it:
+
+```{r patchwork, eval = FALSE}
+library(patchwork)
+pa + plot_layout(nrow = 2) +
+  plot_annotation(title = "Folded boxplots")
+```
+
+## Facets keep working
+
+Existing `facet_wrap()` / `facet_grid()` specifications are kept: truncation
+subsets the data, so each segment still contains all facet panels.
+
+```{r facets, fig.height=4.4, fig.width=7}
+d7 <- data.frame(
+  variable = factor(rep(sprintf("v%02d", 1:30), each = 24)),
+  grp = factor(rep(c("treatment", "control"), 360)),
+  value = rnorm(720, sd = 3)
+)
+ggplot(d7, aes(variable, value, fill = grp)) +
+  geom_boxplot(outlier.size = 0.4) +
+  facet_wrap(~grp, nrow = 2) +
+  ggchunk(method = "x", n_per_chunk = 15) +
+  academic_theme +
+  theme(axis.text.x = element_text(angle = 90, size = 12))
+```
+
+## Notes and limitations
+
+* Axis limits set explicitly by the user (e.g.
+  `scale_x_discrete(limits = ...)`) are respected and will not be reduced per
+  segment.
+* Layers carrying their own data are filtered with the same segment bounds
+  when possible; if their key cannot be evaluated and their row count
+  differs from the main data, they are drawn unfiltered in every segment
+  (with a warning).
+* Rows with missing values on the truncation axis are kept in the first
+  segment so no data is lost.
+* ggchunk is tested against ggplot2 4.x; the API targets ggplot2 >= 3.4.
