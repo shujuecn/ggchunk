@@ -138,6 +138,26 @@ test_that("all segments render into ONE figure", {
   expect_no_error(suppressMessages(print(p)))
 })
 
+test_that("all segments retain legends for collect", {
+  d <- data.frame(
+    variable = factor(rep(sprintf("v%02d", 1:40), each = 2)),
+    batch = factor(rep(c("A", "B"), 40), levels = c("A", "B")),
+    value = rnorm(80)
+  )
+  p <- ggplot2::ggplot(d, ggplot2::aes(variable, value, fill = batch)) +
+    ggplot2::geom_boxplot() +
+    ggchunk(method = "x", n_per_chunk = 20) +
+    ggplot2::scale_fill_manual(values = c(A = "#D55E5E", B = "#19A7A8"), drop = FALSE)
+
+  panels <- lapply(seq_len(n_chunks(p)), function(i) {
+    ggchunk:::build_chunk_plot(p, i) +
+      ggchunk:::compact_panel_theme("x", i, 1L, n_chunks(p), 1L)
+  })
+  expect_true(all(vapply(panels, function(panel) {
+    !identical(panel$theme$legend.position, "none")
+  }, logical(1))))
+})
+
 test_that("a single segment falls back to the unchanged plot", {
   d <- make_box_df(24, per = 5)
   expect_message(

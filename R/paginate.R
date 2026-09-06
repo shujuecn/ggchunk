@@ -89,11 +89,6 @@ compact_panel_theme <- function(axis, row, col, nrow_total, ncol_total = 1L,
       th <- th + ggplot2::theme(axis.title.y = ggplot2::element_blank())
     }
   }
-  # identical legends across segments: keep only the first one's source (the
-  # patchwork path collects it into a single figure-level legend)
-  if (row > 1L || col > 1L) {
-    th <- th + ggplot2::theme(legend.position = "none")
-  }
   th
 }
 
