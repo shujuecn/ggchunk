@@ -32,6 +32,7 @@ build_chunk_plot <- function(x, i) {
   layers <- vector("list", length(x$layers))
   for (j in seq_along(x$layers)) {
     lc <- clone_layer(x$layers[[j]])
+    lc$show.legend <- FALSE
     ld <- st$layer_datas[[j]]
     rows <- ch$rows_layers[[j]]
     if (!is.null(ld) && !is.null(rows) && !anyNA(rows)) {
@@ -40,6 +41,16 @@ build_chunk_plot <- function(x, i) {
     layers[[j]] <- lc
   }
   np$layers <- layers
+
+  legend_data <- primary_data(x)
+  if (length(x$layers) > 0L && is.data.frame(legend_data)) {
+    legend_layer <- clone_layer(x$layers[[1L]])
+    legend_layer$data <- filter_rows(legend_data, ch$rows_plot, st$drop_syms)
+    legend_layer$show.legend <- TRUE
+    legend_layer$inherit.aes <- TRUE
+    legend_layer$aes_params$alpha <- 0
+    np$layers[[length(np$layers) + 1L]] <- legend_layer
+  }
 
   # Share read-only components (each ggplot_build() re-derives scale training
   # from the data, and facet/coords/theme are stateless across builds).
@@ -52,9 +63,64 @@ build_chunk_plot <- function(x, i) {
   if (isTRUE(spec$fixed_perpendicular) && !is.null(st$perpendicular_limits)) {
     np <- apply_perpendicular_limits(np, st$axis, st$perpendicular_limits)
   }
+  np <- complete_guide_keys(np, x)
 
   st$cache[[key]] <- np
   chunk_state(x) <- st
+  np
+}
+
+# Guide keys draw one glyph per scale break. Aesthetics that are mapped but not
+# backed by a scale (e.g. `ymin`/`lower`/`middle`/`upper`/`ymax` of an
+# identity-stat boxplot) are filled in from the layer data; a segment whose data
+# lacks a given group leaves those columns NA and its key glyph cannot be drawn
+# -- which is how a collected patchwork legend can end up showing a label
+# without its icon. Injecting the missing values through the guide's
+# `override.aes` completes every key without touching the drawn panel.
+complete_guide_keys <- function(np, original) {
+  mapping <- combined_mapping(original)
+  legend_data <- primary_data(original)
+  if (is.null(legend_data) || !is.data.frame(legend_data) || nrow(legend_data) == 0L) {
+    return(np)
+  }
+  if (is.null(np$guides) || !is.list(np$guides$guides)) {
+    return(np)
+  }
+  scale_aes <- unique(unlist(
+    lapply(np$scales$scales, function(s) s$aesthetics),
+    use.names = FALSE
+  ))
+  needed <- setdiff(names(mapping), c(scale_aes, "group"))
+  if (length(needed) == 0L) {
+    return(np)
+  }
+  row1 <- legend_data[1L, , drop = FALSE]
+  injected <- list()
+  for (nm in needed) {
+    v <- eval_key(mapping[[nm]], row1)
+    if (!is.null(v) && length(v) == 1L && !is.na(v)) {
+      injected[[nm]] <- v
+    }
+  }
+  if (length(injected) == 0L) {
+    return(np)
+  }
+  # Guides and Guide objects are ggproto environments (reference semantics)
+  # shared with the original plot: clone before mutating.
+  guides <- rlang::env_clone(np$guides)
+  attributes(guides) <- attributes(np$guides)
+  guides$guides <- lapply(guides$guides, function(g) {
+    if (!inherits(g, "Guide")) {
+      return(g)
+    }
+    gc <- rlang::env_clone(g)
+    attributes(gc) <- attributes(g)
+    params <- gc$params %||% list()
+    params[["override.aes"]] <- modifyList(injected, params[["override.aes"]] %||% list())
+    gc$params <- params
+    gc
+  })
+  np$guides <- guides
   np
 }
 

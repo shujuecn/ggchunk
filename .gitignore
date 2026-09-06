@@ -51,3 +51,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# macOS / workspace noise
+.DS_Store
+**/.DS_Store
+.workbuddy/

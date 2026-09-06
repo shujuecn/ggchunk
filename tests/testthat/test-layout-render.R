@@ -150,7 +150,12 @@ test_that("all segments retain legends for collect", {
     ggplot2::scale_fill_manual(values = c(A = "#D55E5E", B = "#19A7A8"), drop = FALSE)
 
   panels <- lapply(seq_len(n_chunks(p)), function(i) {
-    ggchunk:::build_chunk_plot(p, i) +
+    panel <- ggchunk:::build_chunk_plot(p, i)
+    built <- ggplot2::ggplot_build(panel)
+    expect_true(length(unique(built$data[[2]]$fill)) == 2L)
+    expect_false(panel$layers[[1]]$show.legend)
+    expect_true(panel$layers[[length(panel$layers)]]$show.legend)
+    panel +
       ggchunk:::compact_panel_theme("x", i, 1L, n_chunks(p), 1L)
   })
   expect_true(all(vapply(panels, function(panel) {
